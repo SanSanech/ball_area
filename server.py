@@ -42,8 +42,8 @@ async def handler(websocket):
         connections.pop(websocket, None)
 
 async def main():
-    async with websockets.serve(handler, "0.0.0.0", 8000, max_size=5 * 1024 * 1024):
-        print("WebSocket сервер запущен на ws://0.0.0.0:8000")
+    async with websockets.serve(handler, "0.0.0.0", 80, max_size=5 * 1024 * 1024):
+        print("WebSocket сервер запущен на ws://0.0.0.0:80")
         await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
