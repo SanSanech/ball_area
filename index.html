@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Basketball Inference</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    #start-btn {
+      padding: 20px 40px;
+      font-size: 24px;
+      border: none;
+      border-radius: 8px;
+      background: #28a745;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #start-btn:hover {
+      background: #218838;
+    }
+    #video, #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      transform: scaleX(-1); /* зеркалим */
+      display: none;
+    }
+    #info {
+      position: absolute;
+      top: 20px; left: 20px;
+      font-size: 24px;
+      z-index: 2;
+    }
+    canvas { /* чтобы canvas тоже mirror */
+      transform: scaleX(-1);
+    }
+  </style>
+</head>
+<body>
+  <button id="start-btn">Start</button>
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+  <div id="info">Score: <span id="score">0</span></div>
+
+  <!-- Подтягиваем socket.io со своего сервера -->
+  <script src="https://109.73.194.217:5000/socket.io/socket.io.js"></script>
+  <script>
+    const startBtn = document.getElementById('start-btn');
+    const video    = document.getElementById('video');
+    const canvas   = document.getElementById('overlay');
+    const ctx      = canvas.getContext('2d');
+    const scoreEl  = document.getElementById('score');
+    const infoDiv  = document.getElementById('info');
+
+    let socket;
+
+    startBtn.addEventListener('click', async () => {
+      // 1) Запрос камеры
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch (err) {
+        alert(`Не удалось открыть камеру:\n${err.name}: ${err.message}`);
+        return;
+      }
+
+      // 2) В полноэкранный режим
+      const el = document.documentElement;
+      if (el.requestFullscreen)        el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (el.msRequestFullscreen)     el.msRequestFullscreen();
+
+      // 3) Показываем видео/канвас/счёт
+      startBtn.style.display = 'none';
+      video.style.display    = 'block';
+      canvas.style.display   = 'block';
+      infoDiv.style.display  = 'block';
+
+      // Подгоняем canvas под размер видео
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+      });
+
+      // 4) Настраиваем WebSocket
+      socket = io('https://109.73.194.217:5000', { transports: ['websocket'] });
+      socket.on('connect',    () => console.log('Socket connected'));
+      socket.on('disconnect', () => console.log('Socket disconnected'));
+      socket.on('response', ({ boxes, count }) => {
+        // рисуем
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'lime';
+        ctx.font = '20px Arial';
+        ctx.fillStyle = 'lime';
+        for (let b of boxes) {
+          ctx.strokeRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1);
+          ctx.fillText(b.label, b.x1 + 5, b.y1 + 25);
+        }
+        scoreEl.textContent = count;
+      });
+
+      // 5) Отправляем кадры раз в 100 мс
+      setInterval(() => {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const jpeg = canvas.toDataURL('image/jpeg', 0.6);
+          socket.emit('frame', jpeg);
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>
